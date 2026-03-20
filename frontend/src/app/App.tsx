@@ -29,7 +29,7 @@ export default function App() {
       // ✅ IMPORTANT: must match backend
       formData.append("image", file);
 
-      const response = await fetch("http://127.0.0.1:8000/predictImage", {
+      const response = await fetch("https://dip-t7uh.onrender.com/predictImage", {
         method: "POST",
         body: formData
       });
