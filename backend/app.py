@@ -1,13 +1,12 @@
 import os
 import tempfile
 
-from fastapi import FastAPI, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, File, UploadFile  # pyright: ignore[reportMissingImports]
+from fastapi.middleware.cors import CORSMiddleware  # pyright: ignore[reportMissingImports]
 import features
 
 app = FastAPI()
 
-# CORS (needed for the frontend connection)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,7 +27,7 @@ async def predict_image(image: UploadFile = File(...)):
     try:
         content = await image.read()
 
-        # unique temp file per request, deleted afterwards
+        # unique temp file per request, removed afterwards
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             tmp.write(content)
             path = tmp.name
@@ -36,7 +35,11 @@ async def predict_image(image: UploadFile = File(...)):
         out = features.image_classifier(path)
 
         if out["status"] == "ok":
-            return {"result": out["label"], "confidence": out["confidence"]}
+            return {
+                "result": out["label"],
+                "confidence": out["confidence"],
+                "face_found": out["face_found"],
+            }
         if out["status"] == "no_face":
             return {"result": "no_face"}
         return {"error": "Could not read this image."}
