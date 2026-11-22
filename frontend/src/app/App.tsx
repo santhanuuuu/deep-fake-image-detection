@@ -9,7 +9,7 @@ import { BrandMark } from './components/BrandMark';
 
 export default function App() {
   const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'analyzing' | 'complete' | 'error'>('idle');
-  const [result, setResult] = useState<'real' | 'fake' | 'no_face' | null>(null);
+  const [result, setResult] = useState<'real' | 'fake' | 'no_face' | 'inconclusive' | null>(null);
   const [confidence, setConfidence] = useState<number>(0);
 
   const detectionRef = useRef<HTMLDivElement>(null);
@@ -63,6 +63,10 @@ export default function App() {
       } else if (prediction === "no_face") {
         setResult("no_face");
         setConfidence(0);
+        setAnalysisStatus('complete');
+      } else if (prediction === "inconclusive") {
+        setResult("inconclusive");
+        setConfidence(data.confidence);
         setAnalysisStatus('complete');
       } else {
         console.error("Unexpected response:", data);

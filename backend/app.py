@@ -1,8 +1,8 @@
 import os
 import tempfile
 
-from fastapi import FastAPI, File, UploadFile  # pyright: ignore[reportMissingImports]
-from fastapi.middleware.cors import CORSMiddleware  # pyright: ignore[reportMissingImports]
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 import features
 
 app = FastAPI()
@@ -40,6 +40,8 @@ async def predict_image(image: UploadFile = File(...)):
                 "confidence": out["confidence"],
                 "face_found": out["face_found"],
             }
+        if out["status"] == "inconclusive":
+            return {"result": "inconclusive", "confidence": out["confidence"]}
         if out["status"] == "no_face":
             return {"result": "no_face"}
         return {"error": "Could not read this image."}

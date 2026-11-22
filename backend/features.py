@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import tensorflow as tf  # pyright: ignore[reportMissingImports]
+import tensorflow as tf
 
 # Load your deepfake detection model
 model = tf.keras.models.load_model('./models/deepfake2.keras')
@@ -14,9 +14,14 @@ face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 )
 
-# If no face is found, analyze the whole image instead of giving up.
-# Set to False to return "no_face" in that case.
-ALLOW_FULL_IMAGE_FALLBACK = True
+# If no face is found, return "no_face" (recommended). The model was trained on
+# face photos, so running it on a whole drawing or artwork gives confident but
+# meaningless answers. Set to True only if you want that guess anyway.
+ALLOW_FULL_IMAGE_FALLBACK = False
+
+# Below this confidence (%), the model is basically unsure, so we report
+# "inconclusive" instead of a verdict. Tune this using your own test images.
+MIN_CONFIDENCE = 70
 
 MARGIN = 200
 
@@ -75,6 +80,7 @@ def image_classifier(img_path):
     Returns a dict:
       {"status": "ok", "label": "real" | "fake", "confidence": 0-100,
        "face_found": True | False}
+      {"status": "inconclusive", "confidence": 0-100}   (model is unsure)
       {"status": "no_face"}          (only when ALLOW_FULL_IMAGE_FALLBACK is False)
       {"status": "invalid_image"}
     """
@@ -99,6 +105,9 @@ def image_classifier(img_path):
     # class 1 = fake, class 0 = real
     label = "fake" if idx == 1 else "real"
     confidence = round(float(pred[idx]) * 100, 1)
+
+    if confidence < MIN_CONFIDENCE:
+        return {"status": "inconclusive", "confidence": confidence}
 
     return {
         "status": "ok",

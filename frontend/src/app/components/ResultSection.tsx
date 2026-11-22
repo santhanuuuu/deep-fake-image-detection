@@ -1,9 +1,9 @@
-import { ShieldCheck, ShieldAlert, ScanFace } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ScanFace, HelpCircle } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
 interface ResultSectionProps {
   status: 'idle' | 'analyzing' | 'complete' | 'error';
-  result: 'real' | 'fake' | 'no_face' | null;
+  result: 'real' | 'fake' | 'no_face' | 'inconclusive' | null;
   confidence?: number;
 }
 
@@ -35,6 +35,16 @@ const VERDICT = {
     barClass: 'bg-lab-muted',
     borderClass: 'border-lab-border-strong',
     note: "We can only check photos that show a person's face clearly. Try a clear, well-lit photo of a face. Drawings, artwork and masked characters can't be checked.",
+    showConfidence: false,
+    showEstimateNote: false,
+  },
+  inconclusive: {
+    label: 'Inconclusive',
+    Icon: HelpCircle,
+    colorClass: 'text-lab-muted',
+    barClass: 'bg-lab-muted',
+    borderClass: 'border-lab-border-strong',
+    note: "We couldn't reach a confident result for this image. Try a clearer, well-lit photo where the face looks straight at the camera.",
     showConfidence: false,
     showEstimateNote: false,
   },
