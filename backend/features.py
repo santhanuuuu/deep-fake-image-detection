@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf  # pyright: ignore[reportMissingImports]
 
 # Load your deepfake detection model
 model = tf.keras.models.load_model('./models/deepfake2.keras')
@@ -9,49 +9,52 @@ model = tf.keras.models.load_model('./models/deepfake2.keras')
 # so every image is always resized to exactly what the model needs.
 MODEL_SIZE = int(model.input_shape[1])
 
-# Load the face detector once, not on every request
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-)
+# --- Settings you can tune ---------------------------------------------------
+# Smallest face (width in pixels, in the ORIGINAL photo) we will analyze.
+# A tiny, far-away face blown up to the model size is just noise, and the
+# model gives confident but meaningless answers on it.
+MIN_FACE_SIZE = 64
 
-# If no face is found, return "no_face" (recommended). The model was trained on
-# face photos, so running it on a whole drawing or artwork gives confident but
-# meaningless answers. Set to True only if you want that guess anyway.
-ALLOW_FULL_IMAGE_FALLBACK = False
-
-# Below this confidence (%), the model is basically unsure, so we report
-# "inconclusive" instead of a verdict. Tune this using your own test images.
+# Below this confidence (%), the model is unsure -> "inconclusive".
 MIN_CONFIDENCE = 70
 
+# Keep False. Running the model on a whole drawing/scene gives wrong answers.
+ALLOW_FULL_IMAGE_FALLBACK = False
+
 MARGIN = 200
+# -----------------------------------------------------------------------------
+
+# Two frontal-face detectors (the second one handles tilted / harder faces better).
+# Both ship with OpenCV, nothing extra to install.
+_cascades = []
+for _name in ('haarcascade_frontalface_default.xml', 'haarcascade_frontalface_alt2.xml'):
+    _c = cv2.CascadeClassifier(cv2.data.haarcascades + _name)
+    if not _c.empty():
+        _cascades.append(_c)
 
 
 def find_face(img_rgb):
     """
-    Look for the largest face. If none is found, zoom in (upscale 2x) and
-    try again with a more lenient detector. Returns (x, y, w, h) in the
-    ORIGINAL image's coordinates, or None.
+    Return the largest face as (x, y, w, h) in the original image, or None.
+    Faces smaller than MIN_FACE_SIZE are ignored on purpose.
     """
-    # attempt 1: same settings as before
-    faces = face_cascade.detectMultiScale(
-        img_rgb, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-    )
-    if len(faces) > 0:
-        return tuple(max(faces, key=lambda f: f[2] * f[3]))
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+    gray = cv2.equalizeHist(gray)  # helps with backlit / sunset / dark photos
 
-    # attempt 2: zoom in so small faces become detectable
-    h, w = img_rgb.shape[:2]
-    if max(h, w) <= 1500:
-        zoom = 2.0
-        big = cv2.resize(img_rgb, None, fx=zoom, fy=zoom, interpolation=cv2.INTER_CUBIC)
-        faces = face_cascade.detectMultiScale(
-            big, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60)
+    best = None
+    for cascade in _cascades:
+        faces = cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE),
         )
-        if len(faces) > 0:
-            x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
-            return (int(x / zoom), int(y / zoom), int(fw / zoom), int(fh / zoom))
-
-    return None
+        for (x, y, w, h) in faces:
+            if best is None or w * h > best[2] * best[3]:
+                best = (int(x), int(y), int(w), int(h))
+        if best is not None:
+            break  # first detector that finds a face wins
+    return best
 
 
 def to_model_input(img_rgb):
@@ -60,12 +63,14 @@ def to_model_input(img_rgb):
 
 
 def crop_face(img_rgb):
-    """Return the face crop ready for the model, or None if no face is found."""
+    """Return the face crop ready for the model, or None if no usable face."""
     box = find_face(img_rgb)
     if box is None:
         return None
 
     x, y, w, h = box
+    print(f"[detect] image {img_rgb.shape[1]}x{img_rgb.shape[0]}  face box x={x} y={y} w={w} h={h}")
+
     x_margin = max(0, x - MARGIN)
     y_margin = max(0, y - MARGIN)
     w_margin = min(img_rgb.shape[1], w + 2 * MARGIN)
@@ -78,10 +83,9 @@ def crop_face(img_rgb):
 def image_classifier(img_path):
     """
     Returns a dict:
-      {"status": "ok", "label": "real" | "fake", "confidence": 0-100,
-       "face_found": True | False}
-      {"status": "inconclusive", "confidence": 0-100}   (model is unsure)
-      {"status": "no_face"}          (only when ALLOW_FULL_IMAGE_FALLBACK is False)
+      {"status": "ok", "label": "real" | "fake", "confidence": 0-100, "face_found": True}
+      {"status": "inconclusive", "confidence": 0-100}
+      {"status": "no_face"}
       {"status": "invalid_image"}
     """
     img_bgr = cv2.imread(img_path)
@@ -94,9 +98,10 @@ def image_classifier(img_path):
     face_found = face is not None
 
     if not face_found:
+        print(f"[detect] image {img_rgb.shape[1]}x{img_rgb.shape[0]}  no usable face")
         if not ALLOW_FULL_IMAGE_FALLBACK:
             return {"status": "no_face"}
-        face = to_model_input(img_rgb)  # whole image, resized silently
+        face = to_model_input(img_rgb)
 
     input_data = np.expand_dims(face, axis=0)
     pred = model.predict(input_data, verbose=0)[0]
